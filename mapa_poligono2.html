@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mapa con Shapefile y KMZ</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-shapefile"></script>
+    <script src="https://unpkg.com/leaflet-omnivore"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.0.3/pako.min.js"></script>
+    
+    <style>
+        body { font-family: sans-serif; padding: 10px; }
+        #weathermap { width: 100%; height: 500px; border: 1px solid #ccc; margin-bottom: 10px; }
+        button, input { margin-right: 5px; padding: 8px; }
+    </style>
+</head>
+<body>
+
+<h2>🗺️ Crear y Guardar Polígonos, Cargar Shapefile y KMZ</h2>
+
+<div id="weathermap"></div>
+
+<input type="text" id="nombrePoligono" placeholder="Nombre del polígono" />
+<button onclick="iniciarNuevoPoligono()">➕ Nuevo polígono</button>
+<button onclick="dibujarPoligonoActual()">🔷 Dibujar</button>
+<button onclick="guardarPoligono()">💾 Guardar</button>
+<button onclick="cargarPoligonos()">📂 Cargar guardados</button>
+
+<br><br>
+
+<h3>Cargar Shapefile:</h3>
+<input type="file" id="shapefileInput" />
+
+<h3>Cargar KMZ:</h3>
+<input type="file" id="kmzInput" />
+
+<script>
+let mapa;
+let verticesActuales = [];
+
+const capaOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+});
+
+const capaEsri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri & the GIS User Community',
+    maxZoom: 19
+});
+
+function iniciarNuevoPoligono() {
+    verticesActuales = [];
+    document.getElementById('weathermap').innerHTML = "<div id='map' style='width: 100%; height: 100%;'></div>";
+
+    mapa = L.map('map', {
+        center: [0, 0],
+        zoom: 2,
+        layers: [capaEsri]
+    });
+
+    const capasBase = {
+        "🛰️ Esri Satélite": capaEsri,
+        "🗺️ OpenStreetMap": capaOSM
+    };
+
+    L.control.layers(capasBase).addTo(mapa);
+
+    mapa.on('click', function(e) {
+        const latlng = e.latlng;
+        verticesActuales.push(latlng);
+        L.marker(latlng).addTo(mapa)
+            .bindPopup(`Vértice: ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`)
+            .openPopup();
+    });
+}
+
+function dibujarPoligonoActual() {
+    if (verticesActuales.length < 3) {
+        alert("Selecciona al menos 3 puntos.");
+        return;
+    }
+
+    const poligono = L.polygon(verticesActuales, {
+        color: 'green',
+        fillColor: 'lightgreen',
+        fillOpacity: 0.5
+    }).addTo(mapa);
+
+    mapa.fitBounds(poligono.getBounds());
+    poligono.bindPopup("Polígono actual.");
+}
+
+// ✅ GUARDAR con modo: 'no-cors'
+function guardarPoligono() {
+    const nombre = document.getElementById('nombrePoligono').value.trim();
+    if (!nombre) {
+        alert("Escribe un nombre para el polígono.");
+        return;
+    }
+    if (verticesActuales.length < 3) {
+        alert("El polígono necesita al menos 3 puntos.");
+        return;
+    }
+
+    const data = {
+        nombre: nombre,
+        vertices: verticesActuales
+    };
+
+    fetch('https://script.google.com/macros/s/AKfycbwTwsOKyxfA5X2v5xiaGCvSqicR7dJvNUsEyqvHnpggvjbgUQzMZxHTOYZbzemP4jaAdQ/exec', {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify(data),
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(() => {
+        alert("✅ Polígono enviado a Google Sheets.");
+        document.getElementById('nombrePoligono').value = '';
+        verticesActuales = [];
+    })
+    .catch(err => {
+        console.error(err);
+        alert("❌ Error al conectar con Google Sheets.");
+    });
+}
+
+function cargarPoligonos() {
+    const guardados = JSON.parse(localStorage.getItem('poligonos'));
+    if (!guardados || guardados.length === 0) {
+        alert("No hay polígonos guardados localmente.");
+        return;
+    }
+
+    document.getElementById('weathermap').innerHTML = "<div id='map' style='width: 100%; height: 100%;'></div>";
+
+    const mapCarga = L.map('map', {
+        center: [0, 0],
+        zoom: 2,
+        layers: [capaEsri]
+    });
+
+    const capasBase = {
+        "🛰️ Esri Satélite": capaEsri,
+        "🗺️ OpenStreetMap": capaOSM
+    };
+
+    L.control.layers(capasBase).addTo(mapCarga);
+
+    guardados.forEach((poly) => {
+        const poligono = L.polygon(poly.vertices, {
+            color: 'blue',
+            fillColor: 'skyblue',
+            fillOpacity: 0.4
+        }).addTo(mapCarga);
+        poligono.bindPopup(`Polígono: ${poly.nombre}`);
+    });
+}
+
+// Cargar Shapefile
+document.getElementById('shapefileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const shpData = event.target.result;
+            L.shapefile(shpData).addTo(mapa);
+        };
+        reader.readAsArrayBuffer(file);
+    }
+});
+
+// Cargar KMZ
+document.getElementById('kmzInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const kmzData = event.target.result;
+            const unzipData = pako.ungzip(kmzData);
+            const kmlStr = new TextDecoder().decode(unzipData);
+            const kmlLayer = omnivore.kml.parse(kmlStr);
+            kmlLayer.addTo(mapa);
+        };
+        reader.readAsArrayBuffer(file);
+    }
+});
+</script>
+
+</body>
+</html>
