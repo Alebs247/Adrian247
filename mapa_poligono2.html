@@ -5,12 +5,21 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
+    <!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Leaflet Shapefile y Omnivore -->
     <script src="https://unpkg.com/leaflet-shapefile"></script>
     <script src="https://unpkg.com/leaflet-omnivore"></script>
+
+    <!-- Pako para descomprimir KMZ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.0.3/pako.min.js"></script>
-    
+
+    <!-- Leaflet Control Geocoder -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
     <style>
         body { font-family: sans-serif; padding: 10px; }
         #weathermap { width: 100%; height: 500px; border: 1px solid #ccc; margin-bottom: 10px; }
@@ -68,6 +77,11 @@ function iniciarNuevoPoligono() {
 
     L.control.layers(capasBase).addTo(mapa);
 
+    // 🔍 Buscador de direcciones
+    L.Control.geocoder({
+        defaultMarkGeocode: true
+    }).addTo(mapa);
+
     mapa.on('click', function(e) {
         const latlng = e.latlng;
         verticesActuales.push(latlng);
@@ -93,7 +107,6 @@ function dibujarPoligonoActual() {
     poligono.bindPopup("Polígono actual.");
 }
 
-// ✅ GUARDAR con modo: 'no-cors'
 function guardarPoligono() {
     const nombre = document.getElementById('nombrePoligono').value.trim();
     if (!nombre) {
