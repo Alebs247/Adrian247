@@ -4,7 +4,7 @@
     <title>Mapa con Shapefile y KMZ</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
+
     <!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -49,6 +49,11 @@
 <script>
 let mapa;
 let verticesActuales = [];
+
+// 🔢 Función para generar un código único
+function generarCodigoUnico() {
+    return 'ID-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+}
 
 const capaOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -118,12 +123,15 @@ function guardarPoligono() {
         return;
     }
 
+    const codigoUnico = generarCodigoUnico(); // 👈 Generamos un ID único
+
     const data = {
+        codigo: codigoUnico,
         nombre: nombre,
         vertices: verticesActuales
     };
 
-    fetch('https://script.google.com/macros/s/AKfycbwTwsOKyxfA5X2v5xiaGCvSqicR7dJvNUsEyqvHnpggvjbgUQzMZxHTOYZbzemP4jaAdQ/exec', {
+    fetch('https://script.google.com/macros/s/AKfycbzwt2_DYPbt9HXwAR8qAdx09-pJeONCnn-i-nHreDSmAMgHl_2ziUEGzmuDA8GWHyT-9A/exec', {
         method: 'POST',
         mode: 'no-cors',
         body: JSON.stringify(data),
@@ -132,7 +140,7 @@ function guardarPoligono() {
         }
     })
     .then(() => {
-        alert("✅ Polígono enviado a Google Sheets.");
+        alert(`✅ Polígono guardado con código: ${codigoUnico}`);
         document.getElementById('nombrePoligono').value = '';
         verticesActuales = [];
     })
