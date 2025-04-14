@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Mapa con Shapefile y KMZ</title>
+    <title>Mapa Interactivo Planefea 2026</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -9,23 +9,41 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- Leaflet Shapefile y Omnivore -->
-    <script src="https://unpkg.com/leaflet-shapefile"></script>
-    <script src="https://unpkg.com/leaflet-omnivore"></script>
-
-    <!-- Pako para descomprimir KMZ -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.0.3/pako.min.js"></script>
-
-    <!-- Leaflet Control Geocoder -->
+    <!-- Leaflet Geocoder -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
     <style>
-        body { font-family: sans-serif; padding: 10px; }
-        #weathermap { width: 100%; height: 500px; border: 1px solid #ccc; margin-bottom: 10px; }
-        button, input { margin-right: 5px; padding: 8px; }
-    </style>
+    body {
+        font-family: sans-serif;
+        padding: 10px;
+        background-color: #f4fdf6; /* Fondo claro tipo ecológico */
+    }
+
+    h2 {
+        font-family: 'Quicksand', sans-serif;
+        color: #2e7d32; /* Verde natural */
+        font-size: 26px;
+        text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+
+    #weathermap {
+        width: 100%;
+        height: 500px;
+        border: 1px solid #ccc;
+        margin-bottom: 10px;
+    }
+
+    button, input {
+        margin-right: 5px;
+        padding: 8px;
+    }
+</style>
+
 </head>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600&display=swap" rel="stylesheet">
+
 <body>
 
 <h2>🗺️ Crear polígono por Problemática Ambiental</h2>
@@ -36,21 +54,15 @@
 <button onclick="iniciarNuevoPoligono()">➕ Nuevo polígono</button>
 <button onclick="dibujarPoligonoActual()">🔷 Dibujar</button>
 <button onclick="guardarPoligono()">💾 Guardar</button>
-<button onclick="cargarPoligonos()">📂 Cargar guardados</button>
-
-<br><br>
-
-<h3>Cargar Shapefile:</h3>
-<input type="file" id="shapefileInput" />
-
-<h3>Cargar KMZ:</h3>
-<input type="file" id="kmzInput" />
+<!-- <button onclick="cargarPoligonos()">📂 Cargar guardados</button> -->
+<button onclick="borrarMapa()">🗑️ Borrar mapa</button>
 
 <script>
 let mapa;
 let verticesActuales = [];
+let marcadores = [];
+let poligonos = [];
 
-// 🔢 Función para generar un código único
 function generarCodigoUnico() {
     return 'ID-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 }
@@ -67,6 +79,9 @@ const capaEsri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/servic
 
 function iniciarNuevoPoligono() {
     verticesActuales = [];
+    marcadores = [];
+    poligonos = [];
+
     document.getElementById('weathermap').innerHTML = "<div id='map' style='width: 100%; height: 100%;'></div>";
 
     mapa = L.map('map', {
@@ -82,17 +97,14 @@ function iniciarNuevoPoligono() {
 
     L.control.layers(capasBase).addTo(mapa);
 
-    // 🔍 Buscador de direcciones
-    L.Control.geocoder({
-        defaultMarkGeocode: true
-    }).addTo(mapa);
+    // Geocoder
+    L.Control.geocoder({ defaultMarkGeocode: true }).addTo(mapa);
 
     mapa.on('click', function(e) {
         const latlng = e.latlng;
         verticesActuales.push(latlng);
-        L.marker(latlng).addTo(mapa)
-            .bindPopup(`Vértice: ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`)
-            .openPopup();
+        const marker = L.marker(latlng).addTo(mapa);
+        marcadores.push(marker);
     });
 }
 
@@ -108,6 +120,7 @@ function dibujarPoligonoActual() {
         fillOpacity: 0.5
     }).addTo(mapa);
 
+    poligonos.push(poligono);
     mapa.fitBounds(poligono.getBounds());
     poligono.bindPopup("Polígono actual.");
 }
@@ -123,7 +136,13 @@ function guardarPoligono() {
         return;
     }
 
-    const codigoUnico = generarCodigoUnico(); // 👈 Generamos un ID único
+    const confirmar = confirm(`¿Estás seguro de que quieres guardar el polígono "${nombre}"?`);
+    if (!confirmar) {
+        alert("❌ Guardado cancelado.");
+        return;
+    }
+
+    const codigoUnico = generarCodigoUnico();
 
     const data = {
         codigo: codigoUnico,
@@ -182,34 +201,14 @@ function cargarPoligonos() {
     });
 }
 
-// Cargar Shapefile
-document.getElementById('shapefileInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const shpData = event.target.result;
-            L.shapefile(shpData).addTo(mapa);
-        };
-        reader.readAsArrayBuffer(file);
-    }
-});
-
-// Cargar KMZ
-document.getElementById('kmzInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const kmzData = event.target.result;
-            const unzipData = pako.ungzip(kmzData);
-            const kmlStr = new TextDecoder().decode(unzipData);
-            const kmlLayer = omnivore.kml.parse(kmlStr);
-            kmlLayer.addTo(mapa);
-        };
-        reader.readAsArrayBuffer(file);
-    }
-});
+function borrarMapa() {
+    marcadores.forEach(m => mapa.removeLayer(m));
+    poligonos.forEach(p => mapa.removeLayer(p));
+    marcadores = [];
+    poligonos = [];
+    verticesActuales = [];
+    alert("🧹 Mapa limpio.");
+}
 </script>
 
 </body>
