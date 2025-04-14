@@ -13,36 +13,40 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
+    <!-- Proj4 for UTM conversion -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+
+    <!-- Estilos -->
     <style>
-    body {
-        font-family: sans-serif;
-        padding: 10px;
-        background-color: #f4fdf6; /* Fondo claro tipo ecológico */
-    }
+        body {
+            font-family: sans-serif;
+            padding: 10px;
+            background-color: #f4fdf6;
+        }
 
-    h2 {
-        font-family: 'Quicksand', sans-serif;
-        color: #2e7d32; /* Verde natural */
-        font-size: 26px;
-        text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
+        h2 {
+            font-family: 'Quicksand', sans-serif;
+            color: #2e7d32;
+            font-size: 26px;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
 
-    #weathermap {
-        width: 100%;
-        height: 500px;
-        border: 1px solid #ccc;
-        margin-bottom: 10px;
-    }
+        #weathermap {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+        }
 
-    button, input {
-        margin-right: 5px;
-        padding: 8px;
-    }
-</style>
+        button, input {
+            margin-right: 5px;
+            padding: 8px;
+        }
+    </style>
 
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600&display=swap" rel="stylesheet">
 </head>
-<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600&display=swap" rel="stylesheet">
 
 <body>
 
@@ -54,7 +58,6 @@
 <button onclick="iniciarNuevoPoligono()">➕ Nuevo polígono</button>
 <button onclick="dibujarPoligonoActual()">🔷 Dibujar</button>
 <button onclick="guardarPoligono()">💾 Guardar</button>
-<!-- <button onclick="cargarPoligonos()">📂 Cargar guardados</button> -->
 <button onclick="borrarMapa()">🗑️ Borrar mapa</button>
 
 <script>
@@ -62,10 +65,6 @@ let mapa;
 let verticesActuales = [];
 let marcadores = [];
 let poligonos = [];
-
-function generarCodigoUnico() {
-    return 'ID-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-}
 
 const capaOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -76,6 +75,19 @@ const capaEsri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/servic
     attribution: 'Tiles © Esri & the GIS User Community',
     maxZoom: 19
 });
+
+function generarCodigoUnico() {
+    return 'ID-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// 👉 Conversión Lat/Lng a UTM y determinar hemisferio
+function convertirLatLngAUTM(lat, lng) {
+    const zone = Math.floor((lng + 180) / 6) + 1;
+    const hemisferio = lat >= 0 ? 'Norte' : 'Sur';
+    const proj4Utm = `+proj=utm +zone=${zone} +datum=WGS84 +units=m +no_defs ${lat < 0 ? '+south' : ''}`;
+    const [easting, northing] = proj4('WGS84', proj4Utm, [lng, lat]);
+    return { zone, easting, northing, hemisferio };
+}
 
 function iniciarNuevoPoligono() {
     verticesActuales = [];
@@ -96,8 +108,6 @@ function iniciarNuevoPoligono() {
     };
 
     L.control.layers(capasBase).addTo(mapa);
-
-    // Geocoder
     L.Control.geocoder({ defaultMarkGeocode: true }).addTo(mapa);
 
     mapa.on('click', function(e) {
@@ -105,6 +115,16 @@ function iniciarNuevoPoligono() {
         verticesActuales.push(latlng);
         const marker = L.marker(latlng).addTo(mapa);
         marcadores.push(marker);
+
+        const utm = convertirLatLngAUTM(latlng.lat, latlng.lng);
+
+        marker.bindPopup(`
+            <strong>Coordenadas:</strong><br>
+            Lat/Lng: ${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}<br>
+            UTM Zona ${utm.zone} (${utm.hemisferio}):<br>
+            Este: ${utm.easting.toFixed(2)} m<br>
+            Norte: ${utm.northing.toFixed(2)} m
+        `).openPopup();
     });
 }
 
@@ -150,7 +170,7 @@ function guardarPoligono() {
         vertices: verticesActuales
     };
 
-    fetch('https://script.google.com/macros/s/AKfycbzwt2_DYPbt9HXwAR8qAdx09-pJeONCnn-i-nHreDSmAMgHl_2ziUEGzmuDA8GWHyT-9A/exec', {
+    fetch('https://script.google.com/macros/s/AKfycbxwqVJ5iv3pHOARrdL1yB3o0c_A9CTj-h7Cwm7tncznQJhNYkPhQuORsyCGZ0Tb4-PUYA/exec', {
         method: 'POST',
         mode: 'no-cors',
         body: JSON.stringify(data),
@@ -166,38 +186,6 @@ function guardarPoligono() {
     .catch(err => {
         console.error(err);
         alert("❌ Error al conectar con Google Sheets.");
-    });
-}
-
-function cargarPoligonos() {
-    const guardados = JSON.parse(localStorage.getItem('poligonos'));
-    if (!guardados || guardados.length === 0) {
-        alert("No hay polígonos guardados localmente.");
-        return;
-    }
-
-    document.getElementById('weathermap').innerHTML = "<div id='map' style='width: 100%; height: 100%;'></div>";
-
-    const mapCarga = L.map('map', {
-        center: [0, 0],
-        zoom: 2,
-        layers: [capaEsri]
-    });
-
-    const capasBase = {
-        "🛰️ Esri Satélite": capaEsri,
-        "🗺️ OpenStreetMap": capaOSM
-    };
-
-    L.control.layers(capasBase).addTo(mapCarga);
-
-    guardados.forEach((poly) => {
-        const poligono = L.polygon(poly.vertices, {
-            color: 'blue',
-            fillColor: 'skyblue',
-            fillOpacity: 0.4
-        }).addTo(mapCarga);
-        poligono.bindPopup(`Polígono: ${poly.nombre}`);
     });
 }
 
